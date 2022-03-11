@@ -1,0 +1,1 @@
+{"version":3,"file":"instant-meilisearch-client.d.ts","sourceRoot":"","sources":["../../../src/client/instant-meilisearch-client.ts"],"names":[],"mappings":"AACA,OAAO,EACL,yBAAyB,EACzB,0BAA0B,EAO3B,MAAM,UAAU,CAAA;AAQjB;;;;;;;GAOG;AACH,wBAAgB,kBAAkB,CAChC,OAAO,EAAE,MAAM,EACf,MAAM,SAAK,EACX,OAAO,GAAE,yBAA8B,GACtC,0BAA0B,CAkE5B"}

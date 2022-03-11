@@ -48,9 +48,9 @@ export function adaptSearchParams(
   }
 
   // Attributes To Retrieve
-  if (attributesToRetrieve) {
-    meiliSearchParams.attributesToCrop = attributesToRetrieve
-  }
+  // if (attributesToRetrieve) {
+  //   meiliSearchParams.attributesToCrop = attributesToRetrieve
+  // }
 
   // Attributes To Highlight
   meiliSearchParams.attributesToHighlight = searchContext?.attributesToHighlight || [

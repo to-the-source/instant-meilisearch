@@ -1,18 +1,23 @@
-import { Filter, FacetsDistribution, FilterCache } from '../../types';
+import { Filter, FacetsDistribution, FacetsCache, MeiliSearchParams, SearchContext } from '../../types';
 /**
  * @param  {Filter} filters?
- * @returns {FilterCache}
+ * @returns {FacetsCache}
  */
-export declare function cacheFilters(filters?: Filter): FilterCache;
+export declare function getFacetsFromFilter(filters?: Filter): FacetsCache;
+/**
+ * @param  {Filter} filters?
+ * @returns {FacetsCache}
+ */
+export declare function extractFacets(searchContext: SearchContext, searchParams: MeiliSearchParams): FacetsCache;
 /**
  * Assign missing filters to facetsDistribution.
  * All facet passed as filter should appear in the facetsDistribution.
  * If not present, the facet is added with 0 as value.
  *
  *
- * @param  {FilterCache} cache?
+ * @param  {FacetsCache} cache?
  * @param  {FacetsDistribution} distribution?
  * @returns {FacetsDistribution}
  */
-export declare function assignMissingFilters(cachedFilters?: FilterCache, distribution?: FacetsDistribution): FacetsDistribution;
+export declare function addMissingFacets(cachedFacets?: FacetsCache, distribution?: FacetsDistribution): FacetsDistribution;
 //# sourceMappingURL=filters.d.ts.map

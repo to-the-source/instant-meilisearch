@@ -161,9 +161,9 @@ function extractFilters(filters) {
 }
 /**
  * @param  {Filter} filters?
- * @returns {FilterCache}
+ * @returns {FacetsCache}
  */
-function cacheFilters(filters) {
+function getFacetsFromFilter(filters) {
     var extractedFilters = extractFilters(filters);
     var cleanFilters = removeUndefined(extractedFilters);
     return cleanFilters.reduce(function (cache, parsedFilter) {
@@ -174,27 +174,46 @@ function cacheFilters(filters) {
         return cache;
     }, {});
 }
+function getFacetsFromDefaultDistribution(facetsDistribution) {
+    return Object.keys(facetsDistribution).reduce(function (cache, facet) {
+        var _a;
+        var facetValues = Object.keys(facetsDistribution[facet]);
+        return __assign(__assign({}, cache), (_a = {}, _a[facet] = facetValues, _a));
+    }, {});
+}
+/**
+ * @param  {Filter} filters?
+ * @returns {FacetsCache}
+ */
+function extractFacets(searchContext, searchParams) {
+    if (searchContext.keepZeroFacets) {
+        return getFacetsFromDefaultDistribution(searchContext.defaultFacetDistribution);
+    }
+    else {
+        return getFacetsFromFilter(searchParams === null || searchParams === void 0 ? void 0 : searchParams.filter);
+    }
+}
 /**
  * Assign missing filters to facetsDistribution.
  * All facet passed as filter should appear in the facetsDistribution.
  * If not present, the facet is added with 0 as value.
  *
  *
- * @param  {FilterCache} cache?
+ * @param  {FacetsCache} cache?
  * @param  {FacetsDistribution} distribution?
  * @returns {FacetsDistribution}
  */
-function assignMissingFilters(cachedFilters, distribution) {
+function addMissingFacets(cachedFacets, distribution) {
     distribution = distribution || {};
-    // If cachedFilters contains something
-    if (cachedFilters && Object.keys(cachedFilters).length > 0) {
+    // If cachedFacets contains something
+    if (cachedFacets && Object.keys(cachedFacets).length > 0) {
         // for all filters in cached filters
-        for (var cachedFacet in cachedFilters) {
+        for (var cachedFacet in cachedFacets) {
             // if facet does not exist on returned distribution, add an empty object
             if (!distribution[cachedFacet])
                 distribution[cachedFacet] = {};
             // for all fields in every filter
-            for (var _i = 0, _a = cachedFilters[cachedFacet]; _i < _a.length; _i++) {
+            for (var _i = 0, _a = cachedFacets[cachedFacet]; _i < _a.length; _i++) {
                 var cachedField = _a[_i];
                 // if the field is not present in the returned distribution
                 // set it at 0
@@ -221,7 +240,7 @@ function SearchResolver(cache) {
          */
         searchResponse: function (searchContext, searchParams, client) {
             return __awaiter(this, void 0, void 0, function () {
-                var key, entry, filterCache, searchResponse;
+                var key, entry, facetsCache, searchResponse;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
@@ -236,16 +255,16 @@ function SearchResolver(cache) {
                                 return [2 /*return*/, entry
                                     // Cache filters: todo components
                                 ];
-                            filterCache = cacheFilters(searchParams === null || searchParams === void 0 ? void 0 : searchParams.filter);
+                            facetsCache = extractFacets(searchContext, searchParams);
                             return [4 /*yield*/, client
                                     .index(searchContext.indexUid)
                                     .search(searchContext.query, searchParams)
-                                // Add facets back into facetsDistribution
+                                // Add missing facets back into facetsDistribution
                             ];
                         case 1:
                             searchResponse = _a.sent();
-                            // Add facets back into facetsDistribution
-                            searchResponse.facetsDistribution = assignMissingFilters(filterCache, searchResponse.facetsDistribution);
+                            // Add missing facets back into facetsDistribution
+                            searchResponse.facetsDistribution = addMissingFacets(facetsCache, searchResponse.facetsDistribution);
                             // Cache response
                             cache.setEntry(key, searchResponse);
                             return [2 /*return*/, searchResponse];
@@ -562,6 +581,18 @@ function adaptPagination(hits, page, hitsPerPage) {
     var start = page * hitsPerPage;
     return hits.slice(start, start + hitsPerPage);
 }
+/**
+ * @param  {AlgoliaMultipleQueriesQuery} searchRequest
+ * @param  {Context} options
+ * @returns {SearchContext}
+ */
+function createPaginationContext(searchContext) {
+    return {
+        paginationTotalHits: searchContext.paginationTotalHits || 200,
+        hitsPerPage: searchContext.hitsPerPage === undefined ? 20 : searchContext.hitsPerPage,
+        page: (searchContext === null || searchContext === void 0 ? void 0 : searchContext.page) || 0
+    };
+}
 
 /**
  * Replace `em` tags in highlighted Meilisearch hits to
@@ -765,13 +796,14 @@ function adaptHits(hits, searchContext, paginationContext) {
  * @param  {PaginationContext} paginationContext
  * @returns {{ results: Array<AlgoliaSearchResponse<T>> }}
  */
-function adaptSearchResponse(searchResponse, searchContext, paginationContext) {
+function adaptSearchResponse(searchResponse, searchContext) {
     var searchResponseOptionals = {};
     var facets = searchResponse.facetsDistribution;
     var exhaustiveFacetsCount = searchResponse === null || searchResponse === void 0 ? void 0 : searchResponse.exhaustiveFacetsCount;
     if (exhaustiveFacetsCount) {
         searchResponseOptionals.exhaustiveFacetsCount = exhaustiveFacetsCount;
     }
+    var paginationContext = createPaginationContext(searchContext);
     var nbPages = ceiledDivision(searchResponse.hits.length, paginationContext.hitsPerPage);
     var hits = adaptHits(searchResponse.hits, searchContext, paginationContext);
     var exhaustiveNbHits = searchResponse.exhaustiveNbHits;
@@ -784,6 +816,19 @@ function adaptSearchResponse(searchResponse, searchContext, paginationContext) {
     return {
         results: [adaptedSearchResponse]
     };
+}
+
+/**
+ * @param  {AlgoliaMultipleQueriesQuery} searchRequest
+ * @param  {Context} options
+ * @returns {SearchContext}
+ */
+function createSearchContext(searchRequest, options, defaultFacetDistribution) {
+    // Split index name and possible sorting rules
+    var _a = searchRequest.indexName.split(':'), indexUid = _a[0], sortByArray = _a.slice(1);
+    var instantSearchParams = searchRequest.params;
+    var searchContext = __assign(__assign(__assign({}, options), instantSearchParams), { sort: sortByArray.join(':') || '', indexUid: indexUid, defaultFacetDistribution: defaultFacetDistribution, placeholderSearch: !options.placeholderSearch, paginationTotalHits: options.paginationTotalHits != null ? options.paginationTotalHits : 200, keepZeroFacets: !!options.keepZeroFacets });
+    return searchContext;
 }
 
 /**
@@ -814,6 +859,14 @@ function SearchCache(cache) {
     };
 }
 
+function cacheFirstFacetsDistribution(defaultFacetDistribution, searchResponse) {
+    if (searchResponse.query === '' &&
+        Object.keys(defaultFacetDistribution).length === 0) {
+        return searchResponse.facetsDistribution;
+    }
+    return defaultFacetDistribution;
+}
+
 /**
  * Instanciate SearchClient required by instantsearch.js.
  *
@@ -822,18 +875,13 @@ function SearchCache(cache) {
  * @param  {InstantMeiliSearchOptions={}} meiliSearchOptions
  * @returns {InstantMeiliSearchInstance}
  */
-function instantMeiliSearch(hostUrl, apiKey, options) {
+function instantMeiliSearch(hostUrl, apiKey, instantMeiliSearchOptions) {
     if (apiKey === void 0) { apiKey = ''; }
-    if (options === void 0) { options = {}; }
+    if (instantMeiliSearchOptions === void 0) { instantMeiliSearchOptions = {}; }
     // create search resolver with included cache
     var searchResolver = SearchResolver(SearchCache());
     // paginationTotalHits can be 0 as it is a valid number
-    var paginationTotalHits = options.paginationTotalHits != null ? options.paginationTotalHits : 200;
-    var context = {
-        primaryKey: options.primaryKey || undefined,
-        placeholderSearch: options.placeholderSearch !== false,
-        paginationTotalHits: paginationTotalHits
-    };
+    var defaultFacetDistribution = {};
     return {
         MeiliSearchClient: new meilisearch.MeiliSearch({ host: hostUrl, apiKey: apiKey }),
         /**
@@ -842,22 +890,26 @@ function instantMeiliSearch(hostUrl, apiKey, options) {
          */
         search: function (instantSearchRequests) {
             return __awaiter(this, void 0, void 0, function () {
-                var searchRequest, instantSearchParams, searchContext, paginationContext, adaptedSearchRequest, searchResponse, adaptedSearchResponse, e_1;
+                var searchRequest, searchContext, adaptedSearchRequest, searchResponse, adaptedSearchResponse, e_1;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
                             _a.trys.push([0, 2, , 3]);
                             searchRequest = instantSearchRequests[0];
-                            instantSearchParams = searchRequest.params;
-                            searchContext = createSearchContext(searchRequest, context);
-                            paginationContext = createPaginationContext(searchContext, instantSearchParams);
+                            searchContext = createSearchContext(searchRequest, instantMeiliSearchOptions, defaultFacetDistribution);
                             adaptedSearchRequest = adaptSearchParams(searchContext);
                             return [4 /*yield*/, searchResolver.searchResponse(searchContext, adaptedSearchRequest, this.MeiliSearchClient)
-                                // Adapt the Meilisearch responsne to a compliant instantsearch.js response
+                                // Cache first facets distribution of the instantMeilisearch instance
+                                // Needed to add in the facetsDistribution the fields that were not returned
+                                // When the user sets `keepZeroFacets` to true.
                             ];
                         case 1:
                             searchResponse = _a.sent();
-                            adaptedSearchResponse = adaptSearchResponse(searchResponse, searchContext, paginationContext);
+                            // Cache first facets distribution of the instantMeilisearch instance
+                            // Needed to add in the facetsDistribution the fields that were not returned
+                            // When the user sets `keepZeroFacets` to true.
+                            defaultFacetDistribution = cacheFirstFacetsDistribution(defaultFacetDistribution, searchResponse);
+                            adaptedSearchResponse = adaptSearchResponse(searchResponse, searchContext);
                             return [2 /*return*/, adaptedSearchResponse];
                         case 2:
                             e_1 = _a.sent();
@@ -881,30 +933,6 @@ function instantMeiliSearch(hostUrl, apiKey, options) {
                 });
             });
         }
-    };
-}
-/**
- * @param  {AlgoliaMultipleQueriesQuery} searchRequest
- * @param  {Context} options
- * @returns {SearchContext}
- */
-function createSearchContext(searchRequest, options) {
-    // Split index name and possible sorting rules
-    var _a = searchRequest.indexName.split(':'), indexUid = _a[0], sortByArray = _a.slice(1);
-    var instantSearchParams = searchRequest.params;
-    var searchContext = __assign(__assign(__assign({}, options), instantSearchParams), { sort: sortByArray.join(':') || '', indexUid: indexUid });
-    return searchContext;
-}
-/**
- * @param  {AlgoliaMultipleQueriesQuery} searchRequest
- * @param  {Context} options
- * @returns {SearchContext}
- */
-function createPaginationContext(searchContext, params) {
-    return {
-        paginationTotalHits: searchContext.paginationTotalHits || 200,
-        hitsPerPage: searchContext.hitsPerPage === undefined ? 20 : searchContext.hitsPerPage,
-        page: (params === null || params === void 0 ? void 0 : params.page) || 0
     };
 }
 

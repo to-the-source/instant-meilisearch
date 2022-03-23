@@ -4582,7 +4582,10 @@
         // paginationTotalHits can be 0 as it is a valid number
         var defaultFacetDistribution = {};
         return {
-            MeiliSearchClient: new meilisearch_umd.MeiliSearch({ host: hostUrl, apiKey: apiKey }),
+            MeiliSearchClient: new meilisearch_umd.MeiliSearch({
+                host: hostUrl,
+                headers: { 'X-MEILI-API-KEY': apiKey }
+            }),
             /**
              * @param  {readonlyAlgoliaMultipleQueriesQuery[]} instantSearchRequests
              * @returns {Array}

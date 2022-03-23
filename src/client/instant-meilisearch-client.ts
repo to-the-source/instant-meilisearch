@@ -33,7 +33,10 @@ export function instantMeiliSearch(
   let defaultFacetDistribution: any = {}
 
   return {
-    MeiliSearchClient: new MeiliSearch({ host: hostUrl, apiKey: apiKey }),
+    MeiliSearchClient: new MeiliSearch({
+      host: hostUrl,
+      headers: { 'X-MEILI-API-KEY': apiKey },
+    }),
 
     /**
      * @param  {readonlyAlgoliaMultipleQueriesQuery[]} instantSearchRequests

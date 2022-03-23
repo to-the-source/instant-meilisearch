@@ -883,7 +883,10 @@ function instantMeiliSearch(hostUrl, apiKey, instantMeiliSearchOptions) {
     // paginationTotalHits can be 0 as it is a valid number
     var defaultFacetDistribution = {};
     return {
-        MeiliSearchClient: new meilisearch.MeiliSearch({ host: hostUrl, apiKey: apiKey }),
+        MeiliSearchClient: new meilisearch.MeiliSearch({
+            host: hostUrl,
+            headers: { 'X-MEILI-API-KEY': apiKey }
+        }),
         /**
          * @param  {readonlyAlgoliaMultipleQueriesQuery[]} instantSearchRequests
          * @returns {Array}

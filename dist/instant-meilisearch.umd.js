@@ -843,10 +843,11 @@
           __extends(MeiliSearchCommunicationError, _super);
 
           function MeiliSearchCommunicationError(message, body, url, stack) {
+            var _this = this;
+
             var _a, _b, _c;
 
-            var _this = _super.call(this, message) || this;
-
+            _this = _super.call(this, message) || this;
             _this.name = 'MeiliSearchCommunicationError';
             _this.type = 'MeiliSearchCommunicationError';
 
@@ -995,6 +996,65 @@
 
           return MeiliSearchTimeOutError;
         }(Error);
+        /**
+         * Removes undefined entries from object
+         */
+
+
+        function removeUndefinedFromObject(obj) {
+          return Object.entries(obj).reduce(function (acc, curEntry) {
+            var key = curEntry[0],
+                val = curEntry[1];
+            if (val !== undefined) acc[key] = val;
+            return acc;
+          }, {});
+        }
+
+        function sleep(ms) {
+          return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+              switch (_a.label) {
+                case 0:
+                  return [4
+                  /*yield*/
+                  , new Promise(function (resolve) {
+                    return setTimeout(resolve, ms);
+                  })];
+
+                case 1:
+                  return [2
+                  /*return*/
+                  , _a.sent()];
+              }
+            });
+          });
+        }
+
+        function addProtocolIfNotPresent(host) {
+          if (!(host.startsWith('https://') || host.startsWith('http://'))) {
+            return "http://".concat(host);
+          }
+
+          return host;
+        }
+
+        function addTrailingSlash(url) {
+          if (!url.endsWith('/')) {
+            url += '/';
+          }
+
+          return url;
+        }
+
+        function constructHostURL(host) {
+          try {
+            host = addProtocolIfNotPresent(host);
+            host = addTrailingSlash(host);
+            return host;
+          } catch (e) {
+            throw new MeiliSearchError('The provided host is not valid.');
+          }
+        }
 
         var HttpRequests =
         /** @class */
@@ -1008,16 +1068,13 @@
               this.headers['Authorization'] = "Bearer ".concat(config.apiKey);
             }
 
-            this.url = new URL(config.host);
-          }
-
-          HttpRequests.addTrailingSlash = function (url) {
-            if (!url.endsWith('/')) {
-              url += '/';
+            try {
+              var host = constructHostURL(config.host);
+              this.url = new URL(host);
+            } catch (e) {
+              throw new MeiliSearchError('The provided host is not valid.');
             }
-
-            return url;
-          };
+          }
 
           HttpRequests.prototype.request = function (_a) {
             var method = _a.method,
@@ -1219,47 +1276,6 @@
 
           return HttpRequests;
         }();
-        /**
-         * Removes undefined entries from object
-         */
-
-
-        function removeUndefinedFromObject(obj) {
-          return Object.entries(obj).reduce(function (acc, curEntry) {
-            var key = curEntry[0],
-                val = curEntry[1];
-            if (val !== undefined) acc[key] = val;
-            return acc;
-          }, {});
-        }
-
-        function sleep(ms) {
-          return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-              switch (_a.label) {
-                case 0:
-                  return [4
-                  /*yield*/
-                  , new Promise(function (resolve) {
-                    return setTimeout(resolve, ms);
-                  })];
-
-                case 1:
-                  return [2
-                  /*return*/
-                  , _a.sent()];
-              }
-            });
-          });
-        }
-
-        function addProtocolIfNotPresent(host) {
-          if (!(host.startsWith('https://') || host.startsWith('http://'))) {
-            return "http://".concat(host);
-          }
-
-          return host;
-        }
 
         var TaskClient =
         /** @class */
@@ -3063,16 +3079,14 @@
          */
 
 
-        var MeiliSearch =
+        var Client =
         /** @class */
         function () {
           /**
            * Creates new MeiliSearch instance
            * @param {Config} config Configuration object
            */
-          function MeiliSearch(config) {
-            config.host = addProtocolIfNotPresent(config.host);
-            config.host = HttpRequests.addTrailingSlash(config.host);
+          function Client(config) {
             this.config = config;
             this.httpRequest = new HttpRequests(config);
             this.tasks = new TaskClient(config);
@@ -3087,7 +3101,7 @@
            */
 
 
-          MeiliSearch.prototype.index = function (indexUid) {
+          Client.prototype.index = function (indexUid) {
             return new Index(this.config, indexUid);
           };
           /**
@@ -3101,7 +3115,7 @@
            */
 
 
-          MeiliSearch.prototype.getIndex = function (indexUid) {
+          Client.prototype.getIndex = function (indexUid) {
             return __awaiter(this, void 0, void 0, function () {
               return __generator(this, function (_a) {
                 return [2
@@ -3120,7 +3134,7 @@
            */
 
 
-          MeiliSearch.prototype.getRawIndex = function (indexUid) {
+          Client.prototype.getRawIndex = function (indexUid) {
             return __awaiter(this, void 0, void 0, function () {
               return __generator(this, function (_a) {
                 return [2
@@ -3130,14 +3144,47 @@
             });
           };
           /**
-           * Get all indexes in the database
+           * Get all the indexes as Index instances.
            * @memberof MeiliSearch
            * @method getIndexes
+           * @returns {Promise<Index[]>} Promise returning array of raw index information
+           */
+
+
+          Client.prototype.getIndexes = function () {
+            return __awaiter(this, void 0, void 0, function () {
+              var response, indexes;
+
+              var _this = this;
+
+              return __generator(this, function (_a) {
+                switch (_a.label) {
+                  case 0:
+                    return [4
+                    /*yield*/
+                    , this.getRawIndexes()];
+
+                  case 1:
+                    response = _a.sent();
+                    indexes = response.map(function (index) {
+                      return new Index(_this.config, index.uid, index.primaryKey);
+                    });
+                    return [2
+                    /*return*/
+                    , indexes];
+                }
+              });
+            });
+          };
+          /**
+           * Get all the indexes in their raw value (no Index instances).
+           * @memberof MeiliSearch
+           * @method getRawIndexes
            * @returns {Promise<IndexResponse[]>} Promise returning array of raw index information
            */
 
 
-          MeiliSearch.prototype.getIndexes = function () {
+          Client.prototype.getRawIndexes = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3167,7 +3214,7 @@
            */
 
 
-          MeiliSearch.prototype.createIndex = function (uid, options) {
+          Client.prototype.createIndex = function (uid, options) {
             if (options === void 0) {
               options = {};
             }
@@ -3199,7 +3246,7 @@
            */
 
 
-          MeiliSearch.prototype.updateIndex = function (uid, options) {
+          Client.prototype.updateIndex = function (uid, options) {
             if (options === void 0) {
               options = {};
             }
@@ -3229,7 +3276,7 @@
            */
 
 
-          MeiliSearch.prototype.deleteIndex = function (uid) {
+          Client.prototype.deleteIndex = function (uid) {
             return __awaiter(this, void 0, void 0, function () {
               return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -3255,7 +3302,7 @@
            */
 
 
-          MeiliSearch.prototype.deleteIndexIfExists = function (uid) {
+          Client.prototype.deleteIndexIfExists = function (uid) {
             return __awaiter(this, void 0, void 0, function () {
               var e_1;
               return __generator(this, function (_a) {
@@ -3306,7 +3353,7 @@
            */
 
 
-          MeiliSearch.prototype.getTasks = function () {
+          Client.prototype.getTasks = function () {
             return __awaiter(this, void 0, void 0, function () {
               return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -3332,7 +3379,7 @@
            */
 
 
-          MeiliSearch.prototype.getTask = function (taskId) {
+          Client.prototype.getTask = function (taskId) {
             return __awaiter(this, void 0, void 0, function () {
               return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -3360,7 +3407,7 @@
            */
 
 
-          MeiliSearch.prototype.waitForTasks = function (taskIds, _a) {
+          Client.prototype.waitForTasks = function (taskIds, _a) {
             var _b = _a === void 0 ? {} : _a,
                 _c = _b.timeOutMs,
                 timeOutMs = _c === void 0 ? 5000 : _c,
@@ -3398,7 +3445,7 @@
            */
 
 
-          MeiliSearch.prototype.waitForTask = function (taskId, _a) {
+          Client.prototype.waitForTask = function (taskId, _a) {
             var _b = _a === void 0 ? {} : _a,
                 _c = _b.timeOutMs,
                 timeOutMs = _c === void 0 ? 5000 : _c,
@@ -3435,7 +3482,7 @@
            */
 
 
-          MeiliSearch.prototype.getKeys = function () {
+          Client.prototype.getKeys = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3464,7 +3511,7 @@
            */
 
 
-          MeiliSearch.prototype.getKey = function (key) {
+          Client.prototype.getKey = function (key) {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3493,7 +3540,7 @@
            */
 
 
-          MeiliSearch.prototype.createKey = function (options) {
+          Client.prototype.createKey = function (options) {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3523,7 +3570,7 @@
            */
 
 
-          MeiliSearch.prototype.updateKey = function (key, options) {
+          Client.prototype.updateKey = function (key, options) {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3552,7 +3599,7 @@
            */
 
 
-          MeiliSearch.prototype.deleteKey = function (key) {
+          Client.prototype.deleteKey = function (key) {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3582,7 +3629,7 @@
            */
 
 
-          MeiliSearch.prototype.health = function () {
+          Client.prototype.health = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3609,7 +3656,7 @@
            */
 
 
-          MeiliSearch.prototype.isHealthy = function () {
+          Client.prototype.isHealthy = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3655,7 +3702,7 @@
            */
 
 
-          MeiliSearch.prototype.getStats = function () {
+          Client.prototype.getStats = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3685,7 +3732,7 @@
            */
 
 
-          MeiliSearch.prototype.getVersion = function () {
+          Client.prototype.getVersion = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3715,7 +3762,7 @@
            */
 
 
-          MeiliSearch.prototype.createDump = function () {
+          Client.prototype.createDump = function () {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3743,7 +3790,7 @@
            */
 
 
-          MeiliSearch.prototype.getDumpStatus = function (dumpUid) {
+          Client.prototype.getDumpStatus = function (dumpUid) {
             return __awaiter(this, void 0, void 0, function () {
               var url;
               return __generator(this, function (_a) {
@@ -3762,9 +3809,36 @@
               });
             });
           };
+          /**
+           * Generate a tenant token
+           *
+           * @memberof MeiliSearch
+           * @method generateTenantToken
+           * @param {SearchRules} searchRules Search rules that are applied to every search.
+           * @param {TokenOptions} options Token options to customize some aspect of the token.
+           * @returns {String} The token in JWT format.
+           */
+
+
+          Client.prototype.generateTenantToken = function (_searchRules, _options) {
+            var error = new Error();
+            throw new Error("Meilisearch: failed to generate a tenant token. Generation of a token only works in a node environment \n ".concat(error.stack, "."));
+          };
+
+          return Client;
+        }();
+
+        var MeiliSearch =
+        /** @class */
+        function (_super) {
+          __extends(MeiliSearch, _super);
+
+          function MeiliSearch(config) {
+            return _super.call(this, config) || this;
+          }
 
           return MeiliSearch;
-        }();
+        }(Client);
 
         exports.HttpRequests = HttpRequests;
         exports.Index = Index;
@@ -3774,6 +3848,7 @@
         exports.MeiliSearchError = MeiliSearchError;
         exports.MeiliSearchTimeOutError = MeiliSearchTimeOutError;
         exports.addProtocolIfNotPresent = addProtocolIfNotPresent;
+        exports.addTrailingSlash = addTrailingSlash;
         exports["default"] = MeiliSearch;
         exports.httpErrorHandler = httpErrorHandler;
         exports.httpResponseErrorHandler = httpResponseErrorHandler;
@@ -4603,10 +4678,7 @@
         // paginationTotalHits can be 0 as it is a valid number
         var defaultFacetDistribution = {};
         return {
-            MeiliSearchClient: new meilisearch_umd.MeiliSearch({
-                host: hostUrl,
-                headers: { 'X-MEILI-API-KEY': apiKey }
-            }),
+            MeiliSearchClient: new meilisearch_umd.MeiliSearch({ host: hostUrl, apiKey: apiKey }),
             /**
              * @param  {readonlyAlgoliaMultipleQueriesQuery[]} instantSearchRequests
              * @returns {Array}

@@ -240,21 +240,22 @@ function SearchResolver(cache) {
          */
         searchResponse: function (searchContext, searchParams, client) {
             return __awaiter(this, void 0, void 0, function () {
-                var key, entry, facetsCache, searchResponse;
+                var pagination, paginationCache, key, cachedResponse, facetsCache, searchResponse;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
+                            pagination = searchContext.pagination;
+                            paginationCache = searchContext.finitePagination ? {} : pagination;
                             key = cache.formatKey([
                                 searchParams,
                                 searchContext.indexUid,
                                 searchContext.query,
+                                paginationCache,
                             ]);
-                            entry = cache.getEntry(key);
-                            // Request is cached.
-                            if (entry)
-                                return [2 /*return*/, entry
-                                    // Cache filters: todo components
-                                ];
+                            cachedResponse = cache.getEntry(key);
+                            // Check if specific request is already cached with its associated search response.
+                            if (cachedResponse)
+                                return [2 /*return*/, cachedResponse];
                             facetsCache = extractFacets(searchContext, searchParams);
                             return [4 /*yield*/, client
                                     .index(searchContext.indexUid)
@@ -540,13 +541,26 @@ function adaptSearchParams(searchContext) {
     ];
     var placeholderSearch = searchContext.placeholderSearch;
     var query = searchContext.query;
-    var paginationTotalHits = searchContext.paginationTotalHits;
-    // Limit
-    if ((!placeholderSearch && query === '') || paginationTotalHits === 0) {
+    // Pagination
+    var pagination = searchContext.pagination;
+    // Limit based on pagination preferences
+    if ((!placeholderSearch && query === '') ||
+        pagination.paginationTotalHits === 0) {
         meiliSearchParams.limit = 0;
     }
+    else if (searchContext.finitePagination) {
+        meiliSearchParams.limit = pagination.paginationTotalHits;
+    }
     else {
-        meiliSearchParams.limit = paginationTotalHits;
+        var limit = (pagination.page + 1) * pagination.hitsPerPage + 1;
+        // If the limit is bigger than the total hits accepted
+        // force the limit to that amount
+        if (limit > pagination.paginationTotalHits) {
+            meiliSearchParams.limit = pagination.paginationTotalHits;
+        }
+        else {
+            meiliSearchParams.limit = limit;
+        }
     }
     var sort = searchContext.sort;
     // Sort
@@ -580,18 +594,6 @@ function adaptPagination(hits, page, hitsPerPage) {
     }
     var start = page * hitsPerPage;
     return hits.slice(start, start + hitsPerPage);
-}
-/**
- * @param  {AlgoliaMultipleQueriesQuery} searchRequest
- * @param  {Context} options
- * @returns {SearchContext}
- */
-function createPaginationContext(searchContext) {
-    return {
-        paginationTotalHits: searchContext.paginationTotalHits || 200,
-        hitsPerPage: searchContext.hitsPerPage === undefined ? 20 : searchContext.hitsPerPage,
-        page: (searchContext === null || searchContext === void 0 ? void 0 : searchContext.page) || 0
-    };
 }
 
 /**
@@ -799,18 +801,18 @@ function adaptHits(hits, searchContext, paginationContext) {
 function adaptSearchResponse(searchResponse, searchContext) {
     var searchResponseOptionals = {};
     var facets = searchResponse.facetsDistribution;
+    var pagination = searchContext.pagination;
     var exhaustiveFacetsCount = searchResponse === null || searchResponse === void 0 ? void 0 : searchResponse.exhaustiveFacetsCount;
     if (exhaustiveFacetsCount) {
         searchResponseOptionals.exhaustiveFacetsCount = exhaustiveFacetsCount;
     }
-    var paginationContext = createPaginationContext(searchContext);
-    var nbPages = ceiledDivision(searchResponse.hits.length, paginationContext.hitsPerPage);
-    var hits = adaptHits(searchResponse.hits, searchContext, paginationContext);
+    var nbPages = ceiledDivision(searchResponse.hits.length, pagination.hitsPerPage);
+    var hits = adaptHits(searchResponse.hits, searchContext, pagination);
     var exhaustiveNbHits = searchResponse.exhaustiveNbHits;
     var nbHits = searchResponse.nbHits;
     var processingTimeMs = searchResponse.processingTimeMs;
     var query = searchResponse.query;
-    var hitsPerPage = paginationContext.hitsPerPage, page = paginationContext.page;
+    var hitsPerPage = pagination.hitsPerPage, page = pagination.page;
     // Create response object compliant with InstantSearch
     var adaptedSearchResponse = __assign({ index: searchContext.indexUid, hitsPerPage: hitsPerPage, page: page, facets: facets, nbPages: nbPages, exhaustiveNbHits: exhaustiveNbHits, nbHits: nbHits, processingTimeMS: processingTimeMs, query: query, hits: hits, params: '' }, searchResponseOptionals);
     return {
@@ -823,11 +825,30 @@ function adaptSearchResponse(searchResponse, searchContext) {
  * @param  {Context} options
  * @returns {SearchContext}
  */
+function createPaginationContext(_a) {
+    var paginationTotalHits = _a.paginationTotalHits, hitsPerPage = _a.hitsPerPage, page = _a.page;
+    return {
+        paginationTotalHits: paginationTotalHits != null ? paginationTotalHits : 200,
+        hitsPerPage: hitsPerPage === undefined ? 20 : hitsPerPage,
+        page: page || 0
+    };
+}
+
+/**
+ * @param  {AlgoliaMultipleQueriesQuery} searchRequest
+ * @param  {Context} options
+ * @returns {SearchContext}
+ */
 function createSearchContext(searchRequest, options, defaultFacetDistribution) {
     // Split index name and possible sorting rules
     var _a = searchRequest.indexName.split(':'), indexUid = _a[0], sortByArray = _a.slice(1);
     var instantSearchParams = searchRequest.params;
-    var searchContext = __assign(__assign(__assign({}, options), instantSearchParams), { sort: sortByArray.join(':') || '', indexUid: indexUid, defaultFacetDistribution: defaultFacetDistribution, placeholderSearch: !options.placeholderSearch, paginationTotalHits: options.paginationTotalHits != null ? options.paginationTotalHits : 200, keepZeroFacets: !!options.keepZeroFacets });
+    var pagination = createPaginationContext({
+        paginationTotalHits: options.paginationTotalHits,
+        hitsPerPage: instantSearchParams === null || instantSearchParams === void 0 ? void 0 : instantSearchParams.hitsPerPage,
+        page: instantSearchParams === null || instantSearchParams === void 0 ? void 0 : instantSearchParams.page
+    });
+    var searchContext = __assign(__assign(__assign({}, options), instantSearchParams), { sort: sortByArray.join(':') || '', indexUid: indexUid, pagination: pagination, defaultFacetDistribution: defaultFacetDistribution, placeholderSearch: !options.placeholderSearch, keepZeroFacets: !!options.keepZeroFacets, finitePagination: !!options.finitePagination });
     return searchContext;
 }
 

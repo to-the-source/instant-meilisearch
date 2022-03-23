@@ -17,6 +17,7 @@ export declare type InstantMeiliSearchOptions = {
     placeholderSearch?: boolean;
     primaryKey?: string;
     keepZeroFacets?: boolean;
+    finitePagination?: boolean;
 };
 export declare type SearchCacheInterface = {
     getEntry: (key: string) => MeiliSearchResponse | undefined;
@@ -30,6 +31,7 @@ declare type ClientParams = {
     sort?: string;
     indexUid: string;
     paginationTotalHits: number;
+    finitePagination: boolean;
 };
 export declare type GeoSearchContext = {
     aroundLatLng?: string;
@@ -40,15 +42,21 @@ export declare type GeoSearchContext = {
     insideBoundingBox?: InsideBoundingBox;
     insidePolygon?: ReadonlyArray<readonly number[]>;
 };
-export declare type SearchContext = Omit<InstantSearchParams & ClientParams, 'insideBoundingBox'> & {
-    insideBoundingBox?: InsideBoundingBox;
-    keepZeroFacets?: boolean;
-    defaultFacetDistribution: FacetsDistribution;
-};
 export declare type PaginationContext = {
     paginationTotalHits: number;
     hitsPerPage: number;
     page: number;
+};
+export declare type PaginationParams = {
+    paginationTotalHits?: number;
+    hitsPerPage?: number;
+    page?: number;
+};
+export declare type SearchContext = Omit<InstantSearchParams & ClientParams, 'insideBoundingBox' | 'paginationTotalHits'> & {
+    insideBoundingBox?: InsideBoundingBox;
+    keepZeroFacets?: boolean;
+    defaultFacetDistribution: FacetsDistribution;
+    pagination: PaginationContext;
 };
 export declare type InstantMeiliSearchInstance = SearchClient & {
     MeiliSearchClient: MeiliSearch;

@@ -5,4 +5,4 @@ import { InstantMeiliSearchOptions, AlgoliaMultipleQueriesQuery, SearchContext, 
  * @returns {SearchContext}
  */
 export declare function createSearchContext(searchRequest: AlgoliaMultipleQueriesQuery, options: InstantMeiliSearchOptions, defaultFacetDistribution: FacetsDistribution): SearchContext;
-//# sourceMappingURL=contexts.d.ts.map
+//# sourceMappingURL=search-context.d.ts.map
